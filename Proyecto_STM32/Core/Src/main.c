@@ -133,7 +133,139 @@ int main(void)
 
       /* USER CODE BEGIN 3 */
 
+      /* 1. Leer potenciómetro (PA1) */
+      HAL_ADC_Start(&hadc1);
+      HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);
+      adc_value = HAL_ADC_GetValue(&hadc1);   // 0..4095
 
+      /* 2. Calcular dígito 0..9 */
+      digit = (adc_value * 10) / 4096;
+
+      /* 3. Mostrar dígito en LEDs */
+      HAL_GPIO_WritePin(GPIOD,
+                        GPIO_PIN_12 | GPIO_PIN_13 | GPIO_PIN_14 | GPIO_PIN_15,
+                        GPIO_PIN_RESET);
+
+      if (digit & 0x1) HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, GPIO_PIN_SET);
+      if (digit & 0x2) HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_SET);
+      if (digit & 0x4) HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_SET);
+      if (digit & 0x8) HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, GPIO_PIN_SET);
+
+      /* 4. Leer botón */
+      uint8_t button_now = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0);
+
+      if (button_now == GPIO_PIN_SET && button_last == GPIO_PIN_RESET)
+      {
+          // guardar dígito actual
+          input_digits[index_digit] = digit;
+          index_digit++;
+
+          // flash azul para indicar que se ha guardado
+          HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, GPIO_PIN_SET);
+          HAL_Delay(100);
+          HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, GPIO_PIN_RESET);
+
+          // ¿hemos metido ya los 4 dígitos?
+          if (index_digit >= PASSWORD_LENGTH)
+          {
+              // comprobar contraseña
+              uint8_t ok = 1;
+              for (uint8_t i = 0; i < PASSWORD_LENGTH; i++)
+              {
+                  if (input_digits[i] != password[i])
+                  {
+                      ok = 0;
+                      break;
+                  }
+              }
+
+              if (ok)
+              {
+                  // ✅ CONTRASEÑA CORRECTA
+
+                  // barrido hasta abrir
+                  for (uint16_t p = SERVO_CLOSED; p <= SERVO_OPEN; p += 10)
+                  {
+                      __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1, p);
+                      HAL_Delay(10);
+                  }
+
+                  door_is_open = 1;
+
+                  // LED verde encendido mientras está abierta
+                  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, GPIO_PIN_SET);
+                  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_RESET);
+
+                  // mantener abierta X ms
+                  HAL_Delay(AUTO_CLOSE_DELAY_MS);
+
+                  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, GPIO_PIN_RESET);
+
+                  // autocierre: barrido hasta cerrado
+                  for (uint16_t p = SERVO_OPEN; p >= SERVO_CLOSED; p -= 10)
+                  {
+                      __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1, p);
+                      HAL_Delay(10);
+                      if (p < SERVO_CLOSED + 10) break;
+                  }
+
+                  door_is_open = 0;
+                  failed_attempts = 0;  // al acertar, reseteamos fallos
+              }
+              else
+              {
+                  // ❌ CONTRASEÑA INCORRECTA
+
+                  // aumentar contador de fallos
+                  failed_attempts++;
+
+                  // si estaba abierta, cerramos
+                  if (door_is_open)
+                  {
+                      for (uint16_t p = SERVO_OPEN; p >= SERVO_CLOSED; p -= 10)
+                      {
+                          __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1, p);
+                          HAL_Delay(10);
+                          if (p < SERVO_CLOSED + 10) break;
+                      }
+                      door_is_open = 0;
+                  }
+
+                  // parpadeo rojo de error
+                  for (uint8_t k = 0; k < 4; k++)
+                  {
+                      HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_14);
+                      HAL_Delay(200);
+                  }
+                  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_RESET);
+
+                  // ¿hemos llegado al máximo de intentos?
+                  if (failed_attempts >= MAX_FAILED_ATTEMPTS)
+                  {
+                      // bloqueo: rojo parpadeando durante LOCKOUT_TIME_MS
+                      uint16_t steps = LOCKOUT_TIME_MS / 200;
+                      for (uint16_t t = 0; t < steps; t++)
+                      {
+                          HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_14);
+                          HAL_Delay(200);
+                      }
+                      HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_RESET);
+
+                      failed_attempts = 0;
+                      index_digit = 0;
+                  }
+              }
+
+              // preparar nuevo intento
+              index_digit = 0;
+          }
+
+          // anti-rebote
+          HAL_Delay(150);
+      }
+
+      button_last = button_now;
+      HAL_Delay(20);
 
       /* USER CODE END 3 */
     }
