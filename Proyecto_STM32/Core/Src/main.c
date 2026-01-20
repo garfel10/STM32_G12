@@ -1,3 +1,4 @@
+//MAIN.C
 /* USER CODE BEGIN Header */
 /**
   ******************************************************************************
@@ -6,7 +7,7 @@
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2026 STMicroelectronics.
+  * Copyright (c) 2025 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -31,7 +32,10 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+# define PASSWORD_LENGTH 4
+#define AUTO_CLOSE_DELAY_MS   5000
+#define MAX_FAILED_ATTEMPTS   3      // nº máximo de intentos seguidos
+#define LOCKOUT_TIME_MS       5000   // tiempo de bloqueo: 5 s
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -40,13 +44,35 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+ADC_HandleTypeDef hadc1;
+
+TIM_HandleTypeDef htim4;
 
 /* USER CODE BEGIN PV */
+// Potenciómetro
+uint16_t adc_value = 0;
+uint8_t  digit     = 0;
+uint8_t door_is_open = 0; // 0 = cerrada, 1 = abierta
+// Contraseña correcta
+uint8_t password[PASSWORD_LENGTH]     = {1, 1, 1, 1};
+uint8_t input_digits[PASSWORD_LENGTH] = {0};
+uint8_t index_digit = 0;      // cuántos dígitos llevamos metidos
+
+// Botón
+uint8_t button_last = 0;      // estado anterior del botón
+uint8_t failed_attempts = 0;   // fallos seguidos de contraseña
+
+// Servo (ajusta estos si ves que te gusta más otro recorrido)
+const uint16_t SERVO_CLOSED = 1000;   // cerrado
+const uint16_t SERVO_OPEN   = 2000;   // abierto
 
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
+static void MX_GPIO_Init(void);
+static void MX_ADC1_Init(void);
+static void MX_TIM4_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -84,20 +110,34 @@ int main(void)
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_ADC1_Init();
+  MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
+  // Iniciar PWM en TIM4 canal 1 (PB6)
+    HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
 
+    // Servo inicialmente cerrado
+    __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1, SERVO_CLOSED);
+    // empezamos con la puerta cerrada
+    door_is_open = 0;
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1)
-  {
-    /* USER CODE END WHILE */
+    /* Infinite loop */
+    /* USER CODE BEGIN WHILE */
+    while (1)
+    {
+      /* USER CODE END WHILE */
 
-    /* USER CODE BEGIN 3 */
+      /* USER CODE BEGIN 3 */
+
+
+
+      /* USER CODE END 3 */
+    }
   }
-  /* USER CODE END 3 */
-}
 
 /**
   * @brief System Clock Configuration
